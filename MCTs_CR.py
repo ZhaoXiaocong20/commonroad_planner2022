@@ -4,7 +4,7 @@ from commonroad.planning.planning_problem import PlanningProblem
 from commonroad.scenario.lanelet import LaneletNetwork
 from commonroad.scenario.obstacle import Obstacle
 from commonroad.scenario.scenario import Scenario
-from commonroad.visualization.draw_dispatch_cr import draw_object
+# from commonroad.visualization.draw_dispatch_cr import draw_object
 import os
 import copy
 

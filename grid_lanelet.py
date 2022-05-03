@@ -4,7 +4,7 @@ from commonroad.common.file_reader import CommonRoadFileReader
 from commonroad.scenario.obstacle import Obstacle
 from commonroad.scenario.scenario import Scenario
 from commonroad.scenario.trajectory import Trajectory
-from commonroad.visualization.draw_dispatch_cr import draw_object
+# from commonroad.visualization.draw_dispatch_cr import draw_object
 from commonroad.scenario.lanelet import LaneletNetwork
 from commonroad.planning.planning_problem import PlanningProblem
 import os

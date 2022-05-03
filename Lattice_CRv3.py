@@ -1,6 +1,6 @@
 from typing import Iterable
 from commonroad.common.file_reader import CommonRoadFileReader
-from commonroad.visualization.draw_dispatch_cr import draw_object
+# from commonroad.visualization.draw_dispatch_cr import draw_object
 
 import os
 import time

@@ -428,13 +428,13 @@ if __name__ == '__main__':
     # folder_scenarios = os.path.abspath(   
     #     '/home/thor/commonroad-interactive-scenarios/competition_scenarios_new/interactive')
     # 奕彬
-    folder_scenarios = os.path.abspath(
-        '/home/thicv/codes/commonroad/commonroad-scenarios/scenarios/scenarios_cr_competition/competition_scenarios_new/interactive')
-    # 晓聪
     # folder_scenarios = os.path.abspath(
-    #     '/home/zxc/Downloads/competition_scenarios_new/interactive')
-    # name_scenario = "DEU_Frankfurt-24_7_I-1"
-    name_scenario = "DEU_Frankfurt-73_2_I-1"
+    #     '/home/thicv/codes/commonroad/commonroad-scenarios/scenarios/scenarios_cr_competition/competition_scenarios_new/interactive')
+    # 晓聪
+    folder_scenarios = os.path.abspath(
+        '/home/zxc/Downloads/scenarios_phase_1')
+
+    name_scenario = "DEU_Aachen-3_2_I-1"
 
     main_planner = InteractiveCRPlanner()
 
@@ -443,8 +443,8 @@ if __name__ == '__main__':
     simulated_scenario, ego_vehicles = main_planner.process(sumo_sim)
 
     # path for outputting results
-    # output_path = '/home/zxc/Videos/CR_outputs/'
-    output_path = '/home/thicv/codes/commonroad/CR_outputs'
+    output_path = '/home/zxc/Videos/CR_outputs/'
+    # output_path = '/home/thicv/codes/commonroad/CR_outputs'
 
     # video
     output_folder_path = os.path.join(output_path, 'videos/')
@@ -472,25 +472,25 @@ if __name__ == '__main__':
                                                                                 main_planner.vehicle,
                                                                                 main_planner.dt)
     print('Feasible? {}'.format(feasible))
-    recon_num = 0
-    while not (feasible or recon_num >= 3):
-        recon_num += 1
-        # if not feasible. reconstruct the inputs
-        initial_state = trajectory.state_list[0]
-        vehicle = VehicleDynamics.KS(VehicleType.FORD_ESCORT)
-        dt = 0.1
-        reconstructed_states = [vehicle.convert_initial_state(initial_state)] + [
-            vehicle.simulate_next_state(trajectory.state_list[idx], inp, dt)
-            for idx, inp in enumerate(reconstructed_inputs.state_list)
-        ]
-        trajectory_reconstructed = Trajectory(initial_time_step=0, state_list=reconstructed_states)
-
-        for i, state in enumerate(trajectory_reconstructed.state_list):
-            ego_vehicle.driven_trajectory.trajectory.state_list[i] = state
-        feasible, reconstructed_inputs = feasibility_checker.trajectory_feasibility(trajectory_reconstructed,
-                                                                                       main_planner.vehicle,
-                                                                                       main_planner.dt)
-        print('after recon, Feasible? {}'.format(feasible))
+    # recon_num = 0
+    # while not (feasible or recon_num >= 3):
+    #     recon_num += 1
+    #     # if not feasible. reconstruct the inputs
+    #     initial_state = trajectory.state_list[0]
+    #     vehicle = VehicleDynamics.KS(VehicleType.FORD_ESCORT)
+    #     dt = 0.1
+    #     reconstructed_states = [vehicle.convert_initial_state(initial_state)] + [
+    #         vehicle.simulate_next_state(trajectory.state_list[idx], inp, dt)
+    #         for idx, inp in enumerate(reconstructed_inputs.state_list)
+    #     ]
+    #     trajectory_reconstructed = Trajectory(initial_time_step=0, state_list=reconstructed_states)
+    #
+    #     for i, state in enumerate(trajectory_reconstructed.state_list):
+    #         ego_vehicle.driven_trajectory.trajectory.state_list[i] = state
+    #     feasible, reconstructed_inputs = feasibility_checker.trajectory_feasibility(trajectory_reconstructed,
+    #                                                                                    main_planner.vehicle,
+    #                                                                                    main_planner.dt)
+    #     print('after recon, Feasible? {}'.format(feasible))
 
     # saves trajectory to solution file
     save_solution(simulated_scenario, main_planner.planning_problem_set, ego_vehicles,
