@@ -195,12 +195,12 @@ class InteractiveCRPlanner:
             planning_problem = list(self.planning_problem_set.planning_problem_dict.values())[0]
             ego_vehicle = list(ego_vehicles.values())[0]
 
-            # initial positions do not match, stupid!!!
-            planning_problem.initial_state.position = copy.deepcopy(ego_vehicle.current_state.position)
-            planning_problem.initial_state.orientation = copy.deepcopy(ego_vehicle.current_state.orientation)
-            planning_problem.initial_state.velocity = copy.deepcopy(ego_vehicle.current_state.velocity)
-            # ====== plug in your motion planner here
-            # ====== paste in simulations
+            # # initial positions do not match, stupid!!!
+            # planning_problem.initial_state.position = copy.deepcopy(ego_vehicle.current_state.position)
+            # planning_problem.initial_state.orientation = copy.deepcopy(ego_vehicle.current_state.orientation)
+            # planning_problem.initial_state.velocity = copy.deepcopy(ego_vehicle.current_state.velocity)
+            # # ====== plug in your motion planner here
+            # # ====== paste in simulations
 
             # force to get a new action every 1 sceonds
             self.t_record += 0.1
@@ -472,25 +472,26 @@ if __name__ == '__main__':
                                                                                 main_planner.vehicle,
                                                                                 main_planner.dt)
     print('Feasible? {}'.format(feasible))
-    # recon_num = 0
-    # while not (feasible or recon_num >= 3):
-    #     recon_num += 1
-    #     # if not feasible. reconstruct the inputs
-    #     initial_state = trajectory.state_list[0]
-    #     vehicle = VehicleDynamics.KS(VehicleType.FORD_ESCORT)
-    #     dt = 0.1
-    #     reconstructed_states = [vehicle.convert_initial_state(initial_state)] + [
-    #         vehicle.simulate_next_state(trajectory.state_list[idx], inp, dt)
-    #         for idx, inp in enumerate(reconstructed_inputs.state_list)
-    #     ]
-    #     trajectory_reconstructed = Trajectory(initial_time_step=0, state_list=reconstructed_states)
-    #
-    #     for i, state in enumerate(trajectory_reconstructed.state_list):
-    #         ego_vehicle.driven_trajectory.trajectory.state_list[i] = state
-    #     feasible, reconstructed_inputs = feasibility_checker.trajectory_feasibility(trajectory_reconstructed,
-    #                                                                                    main_planner.vehicle,
-    #                                                                                    main_planner.dt)
-    #     print('after recon, Feasible? {}'.format(feasible))
+    recon_num = 0
+    while not (feasible or recon_num >= 3):
+        recon_num += 1
+        # if not feasible. reconstruct the inputs
+        initial_state = trajectory.state_list[0]
+        vehicle = VehicleDynamics.KS(VehicleType.FORD_ESCORT)
+        dt = 0.1
+        reconstructed_states = [vehicle.convert_initial_state(initial_state)] + [
+            vehicle.simulate_next_state(trajectory.state_list[idx], inp, dt)
+            for idx, inp in enumerate(reconstructed_inputs.state_list)
+        ]
+        trajectory_reconstructed = Trajectory(initial_time_step=1, state_list=reconstructed_states)
+
+        for i, state in enumerate(trajectory_reconstructed.state_list):
+            ego_vehicle.driven_trajectory.trajectory.state_list[i] = state
+        feasible, reconstructed_inputs = feasibility_checker.trajectory_feasibility(trajectory_reconstructed,
+                                                                                       main_planner.vehicle,
+                                                                                       main_planner.dt)
+        print('after recon, Feasible? {}'.format(feasible))
+
 
     # saves trajectory to solution file
     save_solution(simulated_scenario, main_planner.planning_problem_set, ego_vehicles,
