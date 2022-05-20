@@ -4,9 +4,9 @@
 import copy
 from time import sleep
 from typing import Dict
-
+from math import sin, cos
 from commonroad.planning.planning_problem import PlanningProblem
-
+import numpy as np
 from CR_tools.utility import distance_lanelet, brake
 import os
 
@@ -263,6 +263,25 @@ class InteractiveCRPlanner:
         is_goal = self.check_goal_state(ego_vehicle.current_state.position,
                                         planning_problem.goal.lanelets_of_goal_position)
 
+        # brake when reach goal
+        if is_goal:
+            next_state = copy.deepcopy(self.ego_state)
+            next_state.steering_angle = 0.0
+            a = -2.0
+            dt = 0.1
+            if next_state.velocity > 0:
+                v = next_state.velocity
+                x, y = next_state.position
+                o = next_state.orientation
+
+                next_state.position = np.array([x + v * cos(o) * dt, y + v * sin(o) * dt])
+                next_state.velocity += a * dt
+            # ====== end of motion planner
+
+            # update the ego vehicle with new trajectory with only 1 state for the current step
+            next_state.time_step = 1
+            return next_state
+
         # update action
         if not current_time_step == 0 and self.last_semantic_action in {1, 2}:
             action.T -= 0.1
@@ -274,25 +293,25 @@ class InteractiveCRPlanner:
             next_state = self.next_states_queue.pop(0)
             return next_state
 
-        if is_goal:
-            print('goal reached! braking!')
-            if self.is_reach_goal_region and len(self.next_states_queue) > 0:
-                next_state = self.next_states_queue.pop(0)
-                return next_state
-
-            self.is_reach_goal_region = True
-            # 直接刹车
-            # next_state = brake(ego_vehicle.current_state, self.goal_info[1], self.goal_info[2])
-            action = brake(self.scenario, ego_vehicle)
-            self.is_new_action_needed = False
-            # update the last action info
-            self.last_action = action
-
-            # lattice planning
-            lattice_planner = Lattice_CRv3(self.scenario, ego_vehicle)
-            self.next_states_queue, _ = lattice_planner.planner(action, 3)
-            next_state = self.next_states_queue.pop(0)
-            return next_state
+        # if is_goal:
+        #     print('goal reached! braking!')
+        #     if self.is_reach_goal_region and len(self.next_states_queue) > 0:
+        #         next_state = self.next_states_queue.pop(0)
+        #         return next_state
+        #
+        #     self.is_reach_goal_region = True
+        #     # 直接刹车
+        #     # next_state = brake(ego_vehicle.current_state, self.goal_info[1], self.goal_info[2])
+        #     action = brake(self.scenario, ego_vehicle)
+        #     self.is_new_action_needed = False
+        #     # update the last action info
+        #     self.last_action = action
+        #
+        #     # lattice planning
+        #     lattice_planner = Lattice_CRv3(self.scenario, ego_vehicle)
+        #     self.next_states_queue, _ = lattice_planner.planner(action, 3)
+        #     next_state = self.next_states_queue.pop(0)
+        #     return next_state
 
         "check if start to car-following"
         front_veh_info = front_vehicle_info_extraction(self.scenario,
@@ -377,11 +396,27 @@ def motion_planner_interactive(scenario_path: str):
     main_planner = InteractiveCRPlanner()
     paths = scenario_path.split('/')
     name_scenario = paths[-1]
-    # folder_scenarios = os.path.join(*paths[:-1])
-    folder_scenarios = "/commonroad/scenarios"
+    folder_scenarios = os.path.join('/', *paths[:-1])
+    # folder_scenarios = "/commonroad/scenarios"
     sumo_sim = main_planner.initialize(folder_scenarios, name_scenario)
 
     simulated_scenario, ego_vehicles = main_planner.process(sumo_sim)
+
+    # output_path = '/home/zxc/Videos/CR_outputs/'
+    # # video
+    # output_folder_path = os.path.join(output_path, 'videos/')
+    # # solution
+    # path_solutions = os.path.join(output_path, 'solutions/')
+    # # simulated scenarios
+    # path_scenarios_simulated = os.path.join(output_path, 'simulated_scenarios/')
+    #
+    # # create mp4 animation
+    # create_video(simulated_scenario,
+    #              output_folder_path,
+    #              main_planner.planning_problem_set,
+    #              ego_vehicles,
+    #              True,
+    #              "_planner")
 
     # get trajectory
     ego_vehicle = list(ego_vehicles.values())[0]
@@ -399,23 +434,44 @@ def motion_planner_interactive(scenario_path: str):
             vehicle.simulate_next_state(trajectory.state_list[idx], inp, dt)
             for idx, inp in enumerate(reconstructed_inputs.state_list)
         ]
-        trajectory_reconstructed = Trajectory(initial_time_step=0, state_list=reconstructed_states)
+        trajectory_reconstructed = Trajectory(initial_time_step=1, state_list=reconstructed_states)
         # feasible_re, reconstructed_inputs = feasibility_checker.trajectory_feasibility(trajectory_reconstructed,
         #                                                                                main_planner.vehicle,
         #                                                                                main_planner.dt)
         for i, state in enumerate(trajectory_reconstructed.state_list):
-            ego_vehicle.driven_trajectory.trajectory.state_list[i] = trajectory_reconstructed.state_list[i]
+            ego_vehicle.driven_trajectory.trajectory.state_list[i] = state
         # print('after recon, Feasible? {}'.format(feasible_re))
 
     # create solution object for benchmark
     pps = []
     for pp_id, ego_vehicle in ego_vehicles.items():
         assert pp_id in main_planner.planning_problem_set.planning_problem_dict
+        state_initial = copy.deepcopy(main_planner.planning_problem_set.planning_problem_dict[pp_id].initial_state)
+        set_attributes_state_initial = set(state_initial.attributes)
+        list_states_trajectory_full = [state_initial]
+
+        # set missing attributes to correctly construct solution file
+        for state in ego_vehicle.driven_trajectory.trajectory.state_list:
+            set_attributes_state = set(state.attributes)
+
+            set_attributes_in_state_extra = set_attributes_state.difference(set_attributes_state_initial)
+            if set_attributes_in_state_extra:
+                for attribute in set_attributes_in_state_extra:
+                    setattr(state_initial, attribute, 0)
+
+            set_attributes_in_state_initial_extra = set_attributes_state_initial.difference(set_attributes_state)
+            if set_attributes_in_state_initial_extra:
+                for attribute in set_attributes_in_state_initial_extra:
+                    setattr(state, attribute, 0)
+
+            list_states_trajectory_full.append(state)
+
+        trajectory_full = Trajectory(initial_time_step=0, state_list=list_states_trajectory_full)
         pps.append(PlanningProblemSolution(planning_problem_id=pp_id,
                                            vehicle_type=main_planner.vehicle_type,
                                            vehicle_model=main_planner.vehicle_model,
                                            cost_function=main_planner.cost_function,
-                                           trajectory=ego_vehicle.driven_trajectory.trajectory))
+                                           trajectory=trajectory_full))
 
     solution = Solution(simulated_scenario.scenario_id, pps)
 
@@ -432,78 +488,91 @@ if __name__ == '__main__':
     #     '/home/thicv/codes/commonroad/commonroad-scenarios/scenarios/scenarios_cr_competition/competition_scenarios_new/interactive')
     # 晓聪
     folder_scenarios = os.path.abspath(
-        '/home/zxc/Downloads/scenarios_phase_1')
+        '/home/zxc/Downloads/scenarios_phase_1/')
 
-    name_scenario = "DEU_Aachen-3_2_I-1"
+    name_scenario = "DEU_Aachen-3_1_I-1"
 
-    main_planner = InteractiveCRPlanner()
+    "==== use planner function ===="
+    solution_dir = '/home/zxc/Videos/CR_outputs/solutions/'
 
-    sumo_sim = main_planner.initialize(folder_scenarios, name_scenario)
+    scenario_path = os.path.join(folder_scenarios, name_scenario)
 
-    simulated_scenario, ego_vehicles = main_planner.process(sumo_sim)
+    solution = motion_planner_interactive(scenario_path)
 
-    # path for outputting results
-    output_path = '/home/zxc/Videos/CR_outputs/'
-    # output_path = '/home/thicv/codes/commonroad/CR_outputs'
+    csw = CommonRoadSolutionWriter(solution)
+    csw.write_to_file(output_path=solution_dir, overwrite=True)
+    print("Trajectory saved to solution file.")
 
-    # video
-    output_folder_path = os.path.join(output_path, 'videos/')
-    # solution
-    path_solutions = os.path.join(output_path, 'solutions/')
-    # simulated scenarios
-    path_scenarios_simulated = os.path.join(output_path, 'simulated_scenarios/')
-
-    # create mp4 animation
-    create_video(simulated_scenario,
-                 output_folder_path,
-                 main_planner.planning_problem_set,
-                 ego_vehicles,
-                 True,
-                 "_planner")
-
-    # # write simulated scenario to file
-    # fw = CommonRoadFileWriter(simulated_scenario, main_planner.planning_problem_set, author, affiliation, source, tags)
-    # fw.write_to_file(f"{path_scenarios_simulated}{name_scenario}_planner.xml", OverwriteExistingFile.ALWAYS)
-
-    # get trajectory
-    ego_vehicle = list(ego_vehicles.values())[0]
-    trajectory = ego_vehicle.driven_trajectory.trajectory
-    feasible, reconstructed_inputs = feasibility_checker.trajectory_feasibility(trajectory,
-                                                                                main_planner.vehicle,
-                                                                                main_planner.dt)
-    print('Feasible? {}'.format(feasible))
-    recon_num = 0
-    while not (feasible or recon_num >= 3):
-        recon_num += 1
-        # if not feasible. reconstruct the inputs
-        initial_state = trajectory.state_list[0]
-        vehicle = VehicleDynamics.KS(VehicleType.FORD_ESCORT)
-        dt = 0.1
-        reconstructed_states = [vehicle.convert_initial_state(initial_state)] + [
-            vehicle.simulate_next_state(trajectory.state_list[idx], inp, dt)
-            for idx, inp in enumerate(reconstructed_inputs.state_list)
-        ]
-        trajectory_reconstructed = Trajectory(initial_time_step=1, state_list=reconstructed_states)
-
-        for i, state in enumerate(trajectory_reconstructed.state_list):
-            ego_vehicle.driven_trajectory.trajectory.state_list[i] = state
-        feasible, reconstructed_inputs = feasibility_checker.trajectory_feasibility(trajectory_reconstructed,
-                                                                                       main_planner.vehicle,
-                                                                                       main_planner.dt)
-        print('after recon, Feasible? {}'.format(feasible))
-
-
-    # saves trajectory to solution file
-    save_solution(simulated_scenario, main_planner.planning_problem_set, ego_vehicles,
-                  main_planner.vehicle_type,
-                  main_planner.vehicle_model,
-                  main_planner.cost_function,
-                  path_solutions, overwrite=True)
-
-    solution = CommonRoadSolutionReader.open(os.path.join(path_solutions,
-                                                          f"solution_KS1:TR1:{name_scenario}:2020a.xml"))
-    res = valid_solution(main_planner.scenario, main_planner.planning_problem_set, solution)
-    print(res)
+    "==== end of use planner function ===="
+    #
+    # main_planner = InteractiveCRPlanner()
+    #
+    # sumo_sim = main_planner.initialize(folder_scenarios, name_scenario)
+    #
+    # simulated_scenario, ego_vehicles = main_planner.process(sumo_sim)
+    #
+    # # path for outputting results
+    # output_path = '/home/zxc/Videos/CR_outputs/'
+    # # output_path = '/home/thicv/codes/commonroad/CR_outputs'
+    #
+    # # video
+    # output_folder_path = os.path.join(output_path, 'videos/')
+    # # solution
+    # path_solutions = os.path.join(output_path, 'solutions/')
+    # # simulated scenarios
+    # path_scenarios_simulated = os.path.join(output_path, 'simulated_scenarios/')
+    #
+    # # create mp4 animation
+    # create_video(simulated_scenario,
+    #              output_folder_path,
+    #              main_planner.planning_problem_set,
+    #              ego_vehicles,
+    #              True,
+    #              "_planner")
+    #
+    # # # write simulated scenario to file
+    # # fw = CommonRoadFileWriter(simulated_scenario, main_planner.planning_problem_set, author, affiliation, source, tags)
+    # # fw.write_to_file(f"{path_scenarios_simulated}{name_scenario}_planner.xml", OverwriteExistingFile.ALWAYS)
+    #
+    # # get trajectory
+    # ego_vehicle = list(ego_vehicles.values())[0]
+    # trajectory = ego_vehicle.driven_trajectory.trajectory
+    # feasible, reconstructed_inputs = feasibility_checker.trajectory_feasibility(trajectory,
+    #                                                                             main_planner.vehicle,
+    #                                                                             main_planner.dt)
+    # print('Feasible? {}'.format(feasible))
+    # recon_num = 0
+    # while not (feasible or recon_num >= 3):
+    #     recon_num += 1
+    #     # if not feasible. reconstruct the inputs
+    #     initial_state = trajectory.state_list[0]
+    #     vehicle = VehicleDynamics.KS(VehicleType.FORD_ESCORT)
+    #     dt = 0.1
+    #     reconstructed_states = [vehicle.convert_initial_state(initial_state)] + [
+    #         vehicle.simulate_next_state(trajectory.state_list[idx], inp, dt)
+    #         for idx, inp in enumerate(reconstructed_inputs.state_list)
+    #     ]
+    #     trajectory_reconstructed = Trajectory(initial_time_step=1, state_list=reconstructed_states)
+    #
+    #     for i, state in enumerate(trajectory_reconstructed.state_list):
+    #         ego_vehicle.driven_trajectory.trajectory.state_list[i] = state
+    #     feasible, reconstructed_inputs = feasibility_checker.trajectory_feasibility(trajectory_reconstructed,
+    #                                                                                    main_planner.vehicle,
+    #                                                                                    main_planner.dt)
+    #     print('after recon, Feasible? {}'.format(feasible))
+    #
+    #
+    # # saves trajectory to solution file
+    # save_solution(simulated_scenario, main_planner.planning_problem_set, ego_vehicles,
+    #               main_planner.vehicle_type,
+    #               main_planner.vehicle_model,
+    #               main_planner.cost_function,
+    #               path_solutions, overwrite=True)
+    #
+    # solution = CommonRoadSolutionReader.open(os.path.join(path_solutions,
+    #                                                       f"solution_KS1:TR1:{name_scenario}:2020a.xml"))
+    # res = valid_solution(main_planner.scenario, main_planner.planning_problem_set, solution)
+    # print(res)
 
     # ce = CostFunctionEvaluator.init_from_solution(solution)
     # cost_result = ce.evaluate_solution(scenario, planning_problem_set, solution)
